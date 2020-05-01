@@ -1,4 +1,4 @@
-const { Sequelize, DataTypes } = require('sequelize');
+const { DataTypes } = require('sequelize');
 const bcrypt = require('bcrypt');
 const uuid = require('uuid')
 const jwt = require('jsonwebtoken')
@@ -57,8 +57,8 @@ module.exports = (sequelize) => {
     return {
       id: this.id,
       email: this.email,
-      firstName: this.firstName,
-      lastName: this.lastName,
+      firstName: this.firstName || undefined,
+      lastName: this.lastName || undefined,
       token
     }
   }

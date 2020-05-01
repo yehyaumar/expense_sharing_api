@@ -1,10 +1,10 @@
-const { check, validationResult } = require('express-validator');
+const { body, validationResult } = require('express-validator');
 const { User } = require('../models/db.config');
 
 module.exports = {
   async register(req, res) {
-    await check("email", "Email is not valid").isEmail().run(req);
-    await check("password", "Password must be at least 8-256 characters long").isLength({ min: 8, max: 256 }).run(req);
+    await body("email", "Email is not valid").isEmail().run(req);
+    await body("password", "Password must be at least 8-256 characters long").isLength({ min: 8, max: 256 }).run(req);
 
     const errors = validationResult(req);
 
