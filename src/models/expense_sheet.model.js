@@ -12,7 +12,11 @@ module.exports = (sequelize) => {
       type: DataTypes.FLOAT,
       allowNull: false
     },
-    debit: {
+    toPay: {
+      type: DataTypes.DOUBLE,
+      allowNull: false
+    },
+    debt: {
       type: DataTypes.DOUBLE,
       allowNull: false
     },

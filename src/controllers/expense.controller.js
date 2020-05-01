@@ -39,7 +39,8 @@ module.exports = {
         expense.setPaidBy(paidByUser, { transaction: t });
 
         for (let [userId, splitRatio] of Object.entries(sharedBetween)) {
-          let credit = 0, debit = 0;
+          let credit = 0, debt = 0;
+          const toPay = amount * splitRatio / 100;
           const user = await User.findOne({
             where: {
               id: userId
@@ -50,15 +51,16 @@ module.exports = {
           }
 
           if (userId === paidByUser.id) {
-            credit = amount * splitRatio / 100;
+            credit = amount;
           } else {
-            debit = amount * splitRatio / 100;
+            debt = toPay;
           }
 
           const expenseSheet = await ExpenseSheet.create({
-            splitRatio: splitRatio,
+            splitRatio,
+            toPay,
             credit,
-            debit
+            debt
           }, { transaction: t })
           expenseSheet.setUser(user);
           expense.addExpenseSheet(expenseSheet);
@@ -82,39 +84,77 @@ module.exports = {
     const expenseId = req.params.expenseId;
     console.log(expenseId)
 
-    try{
-      
-    const expense = await Expense.findOne({
-      attributes: ['id', 'title', 'desc', 'amount', 'createdAt', 'updatedAt'],
-      where: { id: expenseId },
-      include: [
-        {
-          model: User,
-          as: 'paidBy',
-          attributes: ['id', 'email', 'firstName', 'lastName']
-        },
-        {
-          model: ExpenseSheet,
-          attributes: ['id', 'splitRatio', 'credit', 'debit'],
-          include: [
-            {
-              model: User,
-              attributes: ['id', 'email', 'firstName', 'lastName']
-            }
-          ]
-        }
-      ]
-    });
-    if (!expense) {
-      res.status(404).json({ message: "Expense with this id not found" })
+    try {
+      const expense = await Expense.findOne({
+        attributes: ['id', 'title', 'desc', 'amount', 'createdAt', 'updatedAt'],
+        where: { id: expenseId },
+        include: [
+          {
+            model: User,
+            as: 'paidBy',
+            attributes: ['id', 'email', 'firstName', 'lastName']
+          },
+          {
+            model: ExpenseSheet,
+            attributes: ['id', 'splitRatio', 'toPay', 'credit', 'debt'],
+            include: [
+              {
+                model: User,
+                attributes: ['id', 'email', 'firstName', 'lastName']
+              }
+            ]
+          }
+        ]
+      });
+      if (!expense) {
+        res.status(404).json({ message: "Expense with this id not found" })
+        return;
+      }
+      res.status(200).json({ message: "Expense Fetched", expense })
       return;
-    }
-    res.status(200).json({ message: "Expense Fetched", expense })
-    return;
 
-    }catch(err){
+    } catch (err) {
       console.log(err)
       res.status(500).json({ message: "Internal Server error" })
+    }
+  },
+
+  async getTotalBalance(req, res) {
+    let totalMoneyToReceive = 0;
+    let totalMoneyToPay = 0;
+
+    try {
+      const myExpenses = await Expense.findAll({
+        where: {
+          paidById: req.user.id
+        },
+        include: [
+          {
+            model: ExpenseSheet
+          }
+        ]
+      });
+
+      for (let expense of myExpenses) {
+        for(let expenseSheet of expense.ExpenseSheets){
+          totalMoneyToReceive += expenseSheet.debt;
+        }
+      }
+
+      const myExpenseSheets = await ExpenseSheet.findAll({
+        where: {
+          UserId: req.user.id
+        }
+      })
+
+      for(let expenseSheet of myExpenseSheets){
+        totalMoneyToPay += expenseSheet.debt
+      }
+
+      res.json({totalMoneyToReceive, totalMoneyToPay});
+    } catch (err) {
+      console.log("ERRPRR",err)
+      res.status(500).json(err)
     }
   }
 }

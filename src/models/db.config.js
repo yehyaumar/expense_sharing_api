@@ -21,8 +21,8 @@ const User = require("./user.model")(sequelize);
 const Expense = require('./expense.model')(sequelize);
 const ExpenseSheet = require('./expense_sheet.model')(sequelize);
 
-User.hasMany(Expense);
-Expense.belongsTo(User, {as: 'paidBy'});
+User.hasMany(Expense, { foreignKey: 'paidById' });
+Expense.belongsTo(User, {as: 'paidBy', foreignKey: 'paidById'});
 
 Expense.hasMany(ExpenseSheet);
 ExpenseSheet.belongsTo(Expense);
