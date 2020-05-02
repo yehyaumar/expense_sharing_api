@@ -42,7 +42,7 @@ async function userSummaryInternal(id) {
 module.exports = {
   async addExpense(req, res) {
     await body('title', 'Title must not be empty (Must be 1-256 characters long)').isLength({ min: 1, max: 256 }).run(req);
-    await body('amount', 'Amount must not be empty').isDecimal().run(req);
+    await body('amount', 'Amount must be a value greater than 0').isFloat({ gt: 0 }).run(req);
     await body('sharedBetween', 'shared between must not be empty').notEmpty().run(req);
 
     const errors = validationResult(req);
@@ -137,7 +137,7 @@ module.exports = {
       return;
 
     } catch (err) {
-      console.log(err)
+      console.log("[GetAllExpenses]", err)
       res.status(500).json({ message: "Internal Server error" })
     }
   },
@@ -183,7 +183,7 @@ module.exports = {
       return;
 
     } catch (err) {
-      console.log(err)
+      console.log("[GetExpense]",err)
       res.status(500).json({ message: "Internal Server error" })
     }
   },
@@ -245,7 +245,7 @@ module.exports = {
 
   async payAgainstExpense(req, res) {
     await param('expenseId', "ExpenseId must be passed as a valid UUID param").notEmpty().isUUID().run(req);
-    await body('amount', "amount must be passed as a valid decimal").notEmpty().isDecimal().run(req);
+    await body('amount', 'Amount must be a value greater than 0').isFloat({ gt: 0 }).run(req);
     const errors = validationResult(req);
 
     if (!errors.isEmpty()) {
@@ -296,8 +296,8 @@ module.exports = {
   },
 
   async payAgainstUser(req, res) {
-    await param('userId', "ExpenseId must be passed as a valid UUID param").notEmpty().isUUID().run(req);
-    await body('amount', "amount must be passed as a valid decimal").notEmpty().isDecimal().run(req);
+    await param('userId', "UserId must be passed as a valid UUID param").notEmpty().isUUID().run(req);
+    await body('amount', 'Amount must be a value greater than 0').isFloat({ gt: 0 }).run(req);
     const errors = validationResult(req);
 
     if (!errors.isEmpty()) {
@@ -307,10 +307,6 @@ module.exports = {
     const userId = req.params.userId;
     let amount = Number(req.body.amount);
     const amountPaid = amount;
-
-    if (amount <= 0) {
-      res.status(400).json({ message: "amount must be greater than zero" });
-    }
 
     try {
 
