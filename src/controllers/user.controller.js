@@ -1,5 +1,5 @@
 const { body, param, validationResult } = require('express-validator');
-const { User } = require('../models/db.config');
+const { User, Expense, ExpenseSheet } = require('../models/db.config');
 
 module.exports = {
   async register(req, res) {
@@ -81,11 +81,37 @@ module.exports = {
     console.log(userId)
 
     try {
-      const user = await User.findOne({ where: { id: userId } });
+      const user = await User.findOne({ 
+        where: { id: userId },
+        attributes: ['id', 'email', 'firstName', 'lastName'],
+        include: [
+          {
+            model: Expense,
+            attributes: ['id', 'title', 'desc', 'amount', 'createdAt', 'updatedAt'],
+            include: [
+              {
+                model: User,
+                as: 'paidBy',
+                attributes: ['id', 'email', 'firstName', 'lastName']
+              },
+              {
+                model: ExpenseSheet,
+                attributes: ['id', 'splitRatio', 'toPay', 'credit', 'debt'],
+                include: [
+                  {
+                    model: User,
+                    attributes: ['id', 'email', 'firstName', 'lastName']
+                  }
+                ]
+              }
+            ]
+          }
+        ] 
+      });
       if (!user) {
         res.status(404).json({ message: "User with this id doesn't exist" })
       }
-      res.status(200).json({ message: "User by id fetched", user: user.cleanedUser() })
+      res.status(200).json({ message: "User by id fetched", user: user })
       return;
     } catch (err) {
       console.log("[GetUserById]", err);
