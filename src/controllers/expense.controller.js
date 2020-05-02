@@ -136,7 +136,7 @@ module.exports = {
       });
 
       for (let expense of myExpenses) {
-        for(let expenseSheet of expense.ExpenseSheets){
+        for (let expenseSheet of expense.ExpenseSheets) {
           totalMoneyToReceive += expenseSheet.debt;
         }
       }
@@ -147,13 +147,48 @@ module.exports = {
         }
       })
 
-      for(let expenseSheet of myExpenseSheets){
+      for (let expenseSheet of myExpenseSheets) {
         totalMoneyToPay += expenseSheet.debt
       }
 
-      res.json({totalMoneyToReceive, totalMoneyToPay});
+      res.json({ totalMoneyToReceive, totalMoneyToPay });
     } catch (err) {
-      console.log("ERRPRR",err)
+      console.log("ERRPRR", err)
+      res.status(500).json(err)
+    }
+  },
+
+  async userSummary(req, res) {
+    try {
+      const user = await User.findOne({ where: { id: req.user.id } });
+      const myExpenses = await user.getExpenses({ include: [{ model: ExpenseSheet }] })
+
+      let usersWhoOweMe = {};
+
+      for (let expense of myExpenses) {
+        for (let expenseSheet of expense.ExpenseSheets) {
+          if (expenseSheet.UserId !== user.id) {
+            usersWhoOweMe[expenseSheet.UserId] = isNaN(usersWhoOweMe[expenseSheet.UserId]) ? expenseSheet.debt :
+              usersWhoOweMe[expenseSheet.UserId] + expenseSheet.debt;
+          }
+        }
+      }
+
+      let usersIOwe = {};
+      const myExpenseSheets = await user.getExpenseSheets({ include: [{ model: Expense }] });
+
+      for (let expenseSheet of myExpenseSheets) {
+        if (expenseSheet.Expense.paidById !== user.id) {
+          usersIOwe[expenseSheet.Expense.paidById] = isNaN(usersIOwe[expenseSheet.Expense.paidById]) ? expenseSheet.debt :
+            usersIOwe[expenseSheet.Expense.paidById] + expenseSheet.debt;
+        }
+      }
+
+      res.status(200).json({ message: "Users summary of money he owes and is owed from his friends",
+        data: { usersWhoOweMe, usersIOwe } });
+
+    } catch (err) {
+      console.log("ERRPRR", err)
       res.status(500).json(err)
     }
   }
