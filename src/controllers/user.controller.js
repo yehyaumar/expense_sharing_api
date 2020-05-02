@@ -1,4 +1,4 @@
-const { body, validationResult } = require('express-validator');
+const { body, param, validationResult } = require('express-validator');
 const { User } = require('../models/db.config');
 
 module.exports = {
@@ -33,35 +33,80 @@ module.exports = {
     }
   },
 
-  async login(req, res){
+  async login(req, res) {
     const { email, password } = req.body;
-    if(!email || !password){
-      res.status(400).json({ message: "Invalid email or password"});
+    if (!email || !password) {
+      res.status(400).json({ message: "Invalid email or password" });
       return;
     }
 
 
-    try{
+    try {
       const user = await User.findOne({ where: { email } });
-      if(user && await user.isValidPassword(password)) {
+      if (user && await user.isValidPassword(password)) {
         const token = user.generateJWT();
-        res.status(200).json({message: "Logged in successfully", user: user.userWithToken(token)});
+        res.status(200).json({ message: "Logged in successfully", user: user.userWithToken(token) });
         return;
-      }else{
-        res.status(400).json({message: "Invalid email or password"})
+      } else {
+        res.status(400).json({ message: "Invalid email or password" })
         return;
       }
-    }catch(err){
+    } catch (err) {
       console.log("LoginController", err);
-      res.status(500).json({message: "Internal server error"})
+      res.status(500).json({ message: "Internal server error" })
       return;
     }
   },
 
-  async profile(req, res){
-    const user = await User.findOne({ where: {
-      email: req.user.email
-    }})
+  async profile(req, res) {
+    const user = await User.findOne({
+      where: {
+        email: req.user.email
+      }
+    })
     res.json(user.cleanedUser())
+  },
+
+  async getUserById(req, res) {
+    await param('userId', "UserId must be passed as valid UUID param").notEmpty().isUUID().run(req);
+    const errors = validationResult(req);
+
+    if (!errors.isEmpty()) {
+      res.status(400).json(errors.array()[0])
+      return;
+    }
+    const userId = req.params.userId;
+    console.log(userId)
+
+    try {
+      const user = await User.findOne({ where: { id: userId } });
+      if (!user) {
+        res.status(404).json({ message: "User with this id doesn't exist" })
+      }
+      res.status(200).json({ message: "User by id fetched", user: user.cleanedUser() })
+      return;
+    } catch (err) {
+      console.log("[GetUserById]", err);
+      res.status(500).json({ message: "Internal server error" });
+      return;
+    }
+  },
+
+  async getAllUsers(req, res) {
+    try {
+      const users = await User.findAll();
+      const cleanedUsers = [];
+
+      for (user of users) {
+        cleanedUsers.push(user.cleanedUser());
+      }
+      res.status(200).json({ message: "All registered users", data: cleanedUsers })
+      return;
+
+    } catch (err) {
+      console.log("[GetAllUsers]", err);
+      res.status(500).json({ message: "Internal server error" });
+      return;
+    }
   }
 }
