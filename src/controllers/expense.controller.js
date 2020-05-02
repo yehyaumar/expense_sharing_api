@@ -1,6 +1,44 @@
 const { body, param, validationResult } = require('express-validator');
 const { User, Expense, ExpenseSheet, sequelize } = require('../models/db.config');
 
+async function userSummaryInternal(id) {
+  try {
+    const user = await User.findOne({ where: { id } });
+
+    if (!user) {
+      return null;
+    }
+
+    const myExpenses = await user.getExpenses({ include: [{ model: ExpenseSheet }] })
+
+    let usersWhoOweMe = {};
+
+    for (let expense of myExpenses) {
+      for (let expenseSheet of expense.ExpenseSheets) {
+        if (expenseSheet.UserId !== user.id) {
+          usersWhoOweMe[expenseSheet.UserId] = isNaN(usersWhoOweMe[expenseSheet.UserId]) ? expenseSheet.debt :
+            usersWhoOweMe[expenseSheet.UserId] + expenseSheet.debt;
+        }
+      }
+    }
+
+    let usersIOwe = {};
+    const myExpenseSheets = await user.getExpenseSheets({ include: [{ model: Expense }] });
+
+    for (let expenseSheet of myExpenseSheets) {
+      if (expenseSheet.Expense.paidById !== user.id) {
+        usersIOwe[expenseSheet.Expense.paidById] = isNaN(usersIOwe[expenseSheet.Expense.paidById]) ? expenseSheet.debt :
+          usersIOwe[expenseSheet.Expense.paidById] + expenseSheet.debt;
+      }
+    }
+    return {
+      usersWhoOweMe, usersIOwe
+    }
+
+  } catch (err) {
+    throw Error(err)
+  }
+}
 module.exports = {
   async addExpense(req, res) {
     await body('title', 'Title must not be empty (Must be 1-256 characters long)').isLength({ min: 1, max: 256 }).run(req);
@@ -72,7 +110,7 @@ module.exports = {
       res.status(400).json({ message: err.message })
     }
   },
-  async getAllExpenses(req, res){
+  async getAllExpenses(req, res) {
     try {
       const expenses = await Expense.findAll({
         attributes: ['id', 'title', 'desc', 'amount', 'createdAt', 'updatedAt'],
@@ -94,7 +132,7 @@ module.exports = {
           }
         ]
       });
-      
+
       res.status(200).json({ message: "All Expenses Fetched", data: expenses })
       return;
 
@@ -182,7 +220,7 @@ module.exports = {
         totalMoneyToPay += expenseSheet.debt
       }
 
-      res.json({ message: "Total money to receive and total money to be paid", data: { totalMoneyToReceive, totalMoneyToPay }});
+      res.json({ message: "Total money to receive and total money to be paid", data: { totalMoneyToReceive, totalMoneyToPay } });
     } catch (err) {
       console.log("[GetTotalBalance]", err)
       res.status(500).json({ message: "Internal server error" })
@@ -191,32 +229,13 @@ module.exports = {
 
   async userSummary(req, res) {
     try {
-      const user = await User.findOne({ where: { id: req.user.id } });
-      const myExpenses = await user.getExpenses({ include: [{ model: ExpenseSheet }] })
+      const result = await userSummaryInternal(req.user.id)
+      console.log(result)
 
-      let usersWhoOweMe = {};
-
-      for (let expense of myExpenses) {
-        for (let expenseSheet of expense.ExpenseSheets) {
-          if (expenseSheet.UserId !== user.id) {
-            usersWhoOweMe[expenseSheet.UserId] = isNaN(usersWhoOweMe[expenseSheet.UserId]) ? expenseSheet.debt :
-              usersWhoOweMe[expenseSheet.UserId] + expenseSheet.debt;
-          }
-        }
-      }
-
-      let usersIOwe = {};
-      const myExpenseSheets = await user.getExpenseSheets({ include: [{ model: Expense }] });
-
-      for (let expenseSheet of myExpenseSheets) {
-        if (expenseSheet.Expense.paidById !== user.id) {
-          usersIOwe[expenseSheet.Expense.paidById] = isNaN(usersIOwe[expenseSheet.Expense.paidById]) ? expenseSheet.debt :
-            usersIOwe[expenseSheet.Expense.paidById] + expenseSheet.debt;
-        }
-      }
-
-      res.status(200).json({ message: "Users summary of money he owes and is owed from his friends",
-        data: { usersWhoOweMe, usersIOwe } });
+      res.status(200).json({
+        message: "Users summary of money he owes and is owed from his friends",
+        data: result
+      });
 
     } catch (err) {
       console.log("[UsersSummary]", err)
@@ -224,9 +243,9 @@ module.exports = {
     }
   },
 
-  async payAgainstExpense(req, res){
-    await param('expenseId', "ExpenseId must be passed as UUID").notEmpty().isUUID().run(req);
-    await body('amount', "amount must be passed").notEmpty().isDecimal().run(req);
+  async payAgainstExpense(req, res) {
+    await param('expenseId', "ExpenseId must be passed as a valid UUID param").notEmpty().isUUID().run(req);
+    await body('amount', "amount must be passed as a valid decimal").notEmpty().isDecimal().run(req);
     const errors = validationResult(req);
 
     if (!errors.isEmpty()) {
@@ -237,8 +256,8 @@ module.exports = {
     console.log(expenseId);
     const amount = Number(req.body.amount);
 
-    if(amount <= 0 ){
-      res.status(400).json({ message: "amount must be greater than zero"});
+    if (amount <= 0) {
+      res.status(400).json({ message: "amount must be greater than zero" });
     }
 
     try {
@@ -253,26 +272,97 @@ module.exports = {
         ]
       });
 
-      if(!expense){
+      if (!expense) {
         res.status(404).json({ message: "Expense with this id not found" })
         return;
       }
-      for(let expenseSheet of expense.ExpenseSheets){
-        if(expenseSheet.UserId === req.user.id){
-          if(expenseSheet.debt > 0 && amount <= expenseSheet.debt){
+      for (let expenseSheet of expense.ExpenseSheets) {
+        if (expenseSheet.UserId === req.user.id) {
+          if (expenseSheet.debt > 0 && amount <= expenseSheet.debt) {
             expenseSheet.debt -= amount;
             expenseSheet.credit += amount;
             await expenseSheet.save();
             res.status(200).json({ message: `Debt of ${amount} paid. Remaining debt ${expenseSheet.debt}` })
-          }else{
+          } else {
             res.status(400).json({ message: "[Error paying debt] Double check your debt against this expense" })
             return;
           }
         }
       }
-    }catch(err){
+    } catch (err) {
       console.log("[PayAgainstExpense]", err)
       res.status(500).json({ message: "Internal ServerError" })
     }
+  },
+
+  async payAgainstUser(req, res) {
+    await param('userId', "ExpenseId must be passed as a valid UUID param").notEmpty().isUUID().run(req);
+    await body('amount', "amount must be passed as a valid decimal").notEmpty().isDecimal().run(req);
+    const errors = validationResult(req);
+
+    if (!errors.isEmpty()) {
+      res.status(400).json(errors.array()[0])
+      return;
+    }
+    const userId = req.params.userId;
+    let amount = Number(req.body.amount);
+    const amountPaid = amount;
+
+    if (amount <= 0) {
+      res.status(400).json({ message: "amount must be greater than zero" });
+    }
+
+    try {
+
+      const userToPay = await User.findOne({
+        where: {
+          id: userId
+        }
+      });
+
+      if (!userToPay) {
+        res.status(404).json({ message: "User with this id not found" });
+        return;
+      }
+
+      const { usersWhoOweMe, usersIOwe } = await userSummaryInternal(req.user.id);
+      console.log(usersIOwe[userId])
+      if (Object.keys(usersIOwe).includes(userId) && usersIOwe[userId] > 0 && amount <= usersIOwe[userId]) {
+        const expenses = await userToPay.getExpenses()
+        for (let expense of expenses) {
+          const expenseSheets =  await expense.getExpenseSheets();
+          for (let expenseSheet of expenseSheets) {
+
+            if (expenseSheet.UserId === req.user.id && expenseSheet.debt > 0) {
+              if (amount > expenseSheet.debt) {
+                amount -= expenseSheet.debt;
+                expenseSheet.credit += expenseSheet.debt;
+                expenseSheet.debt = 0;
+              }else{
+                expenseSheet.debt -= amount;
+                expenseSheet.credit += amount;
+                amount = 0;
+              }
+              await expenseSheet.save();
+              if(amount === 0 ){
+                res.status(200).json({ message: `Debt of ${amountPaid} paid to ${userToPay.email}.` })
+                return;
+              }
+            }
+          }
+        }
+
+      } else {
+        res.status(400).json({ message: "[Error paying debt] Double check your debt against this user" })
+        return;
+      }
+
+    } catch (err) {
+      console.log("[PayAgainstUser]", err);
+      res.status(500).json({ message: "Internal server error" })
+    }
+
+
+
   }
 }
