@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const passport = require('passport');
-const { addExpense, getExpense, getTotalBalance, userSummary } = require('../controllers/expense.controller')
+const { addExpense, getExpense, getTotalBalance, userSummary, getAllExpenses } = require('../controllers/expense.controller')
 const expenseRouter = Router();
 
 expenseRouter.route('/add')
@@ -14,5 +14,8 @@ expenseRouter.route('/summary')
 
 expenseRouter.route('/:expenseId')
   .get(passport.authenticate('jwt', { session: false, failWithError: true }), getExpense);
+
+expenseRouter.route('/')
+  .get(passport.authenticate('jwt', { session: false, failWithError: true }), getAllExpenses);
 
 module.exports = expenseRouter;

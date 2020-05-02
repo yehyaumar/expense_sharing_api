@@ -72,6 +72,37 @@ module.exports = {
       res.status(400).json({ message: err.message })
     }
   },
+  async getAllExpenses(req, res){
+    try {
+      const expenses = await Expense.findAll({
+        attributes: ['id', 'title', 'desc', 'amount', 'createdAt', 'updatedAt'],
+        include: [
+          {
+            model: User,
+            as: 'paidBy',
+            attributes: ['id', 'email', 'firstName', 'lastName']
+          },
+          {
+            model: ExpenseSheet,
+            attributes: ['id', 'splitRatio', 'toPay', 'credit', 'debt'],
+            include: [
+              {
+                model: User,
+                attributes: ['id', 'email', 'firstName', 'lastName']
+              }
+            ]
+          }
+        ]
+      });
+      
+      res.status(200).json({ message: "All Expenses Fetched", data: expenses })
+      return;
+
+    } catch (err) {
+      console.log(err)
+      res.status(500).json({ message: "Internal Server error" })
+    }
+  },
 
   async getExpense(req, res) {
     await param('expenseId', "ExpenseId must be passed as UUID").notEmpty().isUUID().run(req);
@@ -110,7 +141,7 @@ module.exports = {
         res.status(404).json({ message: "Expense with this id not found" })
         return;
       }
-      res.status(200).json({ message: "Expense Fetched", expense })
+      res.status(200).json({ message: "Expense Fetched", data: expense })
       return;
 
     } catch (err) {
@@ -151,7 +182,7 @@ module.exports = {
         totalMoneyToPay += expenseSheet.debt
       }
 
-      res.json({ totalMoneyToReceive, totalMoneyToPay });
+      res.json({ message: "Total money to receive and total money to be paid", data: { totalMoneyToReceive, totalMoneyToPay }});
     } catch (err) {
       console.log("ERRPRR", err)
       res.status(500).json(err)
