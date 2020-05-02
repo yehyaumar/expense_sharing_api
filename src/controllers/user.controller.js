@@ -22,7 +22,9 @@ module.exports = {
 
       const user = await User.create({
         email: req.body.email,
-        password: req.body.password
+        password: req.body.password,
+        firstName: req.body.firstName,
+        lastName: req.body.lastName
       })
 
       res.status(200).json({ message: "User created", user: user.cleanedUser() });
