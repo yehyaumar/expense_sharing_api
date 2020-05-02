@@ -184,8 +184,8 @@ module.exports = {
 
       res.json({ message: "Total money to receive and total money to be paid", data: { totalMoneyToReceive, totalMoneyToPay }});
     } catch (err) {
-      console.log("ERRPRR", err)
-      res.status(500).json(err)
+      console.log("[GetTotalBalance]", err)
+      res.status(500).json({ message: "Internal server error" })
     }
   },
 
@@ -219,8 +219,60 @@ module.exports = {
         data: { usersWhoOweMe, usersIOwe } });
 
     } catch (err) {
-      console.log("ERRPRR", err)
-      res.status(500).json(err)
+      console.log("[UsersSummary]", err)
+      res.status(500).json({ message: "Internal server error" })
+    }
+  },
+
+  async payAgainstExpense(req, res){
+    await param('expenseId', "ExpenseId must be passed as UUID").notEmpty().isUUID().run(req);
+    await body('amount', "amount must be passed").notEmpty().isDecimal().run(req);
+    const errors = validationResult(req);
+
+    if (!errors.isEmpty()) {
+      res.status(400).json(errors.array()[0])
+      return;
+    }
+    const expenseId = req.params.expenseId;
+    console.log(expenseId);
+    const amount = Number(req.body.amount);
+
+    if(amount <= 0 ){
+      res.status(400).json({ message: "amount must be greater than zero"});
+    }
+
+    try {
+      const expense = await Expense.findOne({
+        where: {
+          id: expenseId
+        },
+        include: [
+          {
+            model: ExpenseSheet
+          }
+        ]
+      });
+
+      if(!expense){
+        res.status(404).json({ message: "Expense with this id not found" })
+        return;
+      }
+      for(let expenseSheet of expense.ExpenseSheets){
+        if(expenseSheet.UserId === req.user.id){
+          if(expenseSheet.debt > 0 && amount <= expenseSheet.debt){
+            expenseSheet.debt -= amount;
+            expenseSheet.credit += amount;
+            await expenseSheet.save();
+            res.status(200).json({ message: `Debt of ${amount} paid. Remaining debt ${expenseSheet.debt}` })
+          }else{
+            res.status(400).json({ message: "[Error paying debt] Double check your debt against this expense" })
+            return;
+          }
+        }
+      }
+    }catch(err){
+      console.log("[PayAgainstExpense]", err)
+      res.status(500).json({ message: "Internal ServerError" })
     }
   }
 }
